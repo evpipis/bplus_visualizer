@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+        <title>B+ Visualizer</title>
+        <link href="bplus.css"rel="stylesheet"type="text/css"/>
+    </head>
+    <body>
+        <script>
+            // Initialization
+            var memory = new WebAssembly.Memory({
+                initial: 32768,
+                maximum: 65536
+            });
+
+            var exports;
+            WebAssembly.instantiateStreaming(fetch("bplus.wasm"), {
+                    js: {
+                        mem: memory
+                    },
+                    env: {
+                        emscripten_resize_heap: function(delta) { memory.grow(delta); }
+                    }
+                }
+            ).then(results => {
+                exports = results.instance.exports
+                memory = results.instance.exports.memory
+            });
+            
+            var loaded = false;
+
+            // Controllers
+            function wasm_print() {
+                var buffer = exports.wasm_print();
+                var str = decodeString(buffer);
+
+                var bytes = new Uint8Array(memory.buffer, buffer);
+                document.querySelector("#output")
+                    .innerHTML = str;
+            }
+
+            function wasm_reset() {
+                document.getElementById('error-message').innerText = '';
+                loaded = true;
+                var deg = document.querySelector("#max-degree").value;
+                // console.log(deg);
+                exports.wasm_init(deg);
+
+                wasm_print();
+            }
+
+            function wasm_rand() {
+                document.getElementById('error-message').innerText = '';
+                wasm_reset();
+
+                exports.wasm_rand(Math.random() * 10000);
+                console.log(Math.random());
+
+                wasm_print();
+            }
+
+            function wasm_ins() {
+                if (!loaded) wasm_reset();
+                
+                var values = parseInput();
+                if (!values) return;
+                for (let val of values)
+                    exports.wasm_ins(val);
+
+                wasm_print();
+            }
+
+            function wasm_del() {
+                if (!loaded) wasm_reset();
+                
+                var values = parseInput();
+                if (!values) return;
+                for (let val of values)
+                    exports.wasm_del(val);
+
+                wasm_print();
+            }
+
+            // Input parsers
+            function parseInput() {
+                const input = document.getElementById('input-values').value.trim();
+                const errorMessage = document.getElementById('error-message');
+                const maxIntValue = 2147483647;
+                const minIntValue = -2147483648;
+
+                if (!input) {
+                    errorMessage.innerText = 'Input cannot be empty.';
+                    return null;
+                }
+
+                const values = input.split(','); //input.split(/\s+/);
+                const intValues = [];
+
+                for (let value of values) {
+                    const intValue = parseInt(value, 10);
+
+                    if (isNaN(intValue)) {
+                        errorMessage.innerText = `Invalid number: ${value}`;
+                        return null;
+                    }
+
+                    if (intValue > maxIntValue) {
+                        errorMessage.innerText = `Number too large: ${value}`;
+                        return null;
+                    }
+
+                    if (intValue < minIntValue) {
+                        errorMessage.innerText = `Number too small: ${value}`;
+                        return null;
+                    }
+
+                    intValues.push(intValue);
+                }
+
+                errorMessage.innerText = '';
+                return intValues;
+            }
+
+            // Memory Encoders
+            function encodeArray(arr, len) {
+                var ptr = exports.wasm_malloc(4 * len);
+                var out = new Uint32Array(memory.buffer, ptr);
+
+                for (var i = 0; i < len; i++)
+                    out[i] = arr[i];
+                return ptr;
+            }
+
+            function encodeString(str) {
+                var ptr = exports.wasm_malloc(str.length);
+                var out = new Uint8Array(memory.buffer, ptr);
+
+                for (var i = 0; i < str.length; i++)
+                    out[i] = arr[i].charCodeAt(0);
+                return ptr;
+            }
+
+            // Memory Decoders
+            function decodeArray(ptr, len) {
+                return new Uint32Array(memory.buffer).slice(ptr, ptr+len);
+            }
+
+            function decodeString(ptr) {
+                var bytes = new Uint8Array(memory.buffer, ptr);
+                var len = 0;
+                while (bytes[len] != 0) len++;
+
+                return new TextDecoder("utf8").decode(bytes.slice(0, len));
+            }
+        </script>
+        
+        <!-- <div class="col"> -->
+          <h1 class = "header"> My Awesome B+ Tree Visualizer </h1>
+
+          <div class = "empty"></div>
+
+          <div class="fixed-box">
+            <div class="slider-container">
+                <label for="max-degree">Max Degree:</label>
+                <input type="range" id="max-degree" min="3" max="10" value="3" oninput="document.getElementById('degree-value').innerText = this.value">
+                <span id="degree-value">3</span>
+            </div>
+            <div>
+                <!-- <label for="input-values">Comma-separated values:</label> -->
+                <!-- <textarea id="input-values" type="number" placeholder="Write your integer keys e.g. 1,2,3,4,5"></textarea> -->
+                <textarea id="input-values" placeholder="Write any integer keys e.g. 1, -7, 10, 0, -5"></textarea>
+                <p id="error-message" class="error-message"></p>
+            </div>
+            <div class="button-group">
+                <button id="reset-button" onclick="wasm_reset()">RESET</button>
+                <button id="random-button" onclick="wasm_rand()">RANDOM</button>
+                <button id="insert-button" onclick="wasm_ins()">INSERT</button>
+                <button id="delete-button" onclick="wasm_del()">DELETE</button>
+            </div>
+          </div>
+
+          <div class="container">
+            <div class="row">
+              <div class="tree">
+                <ul id="output">
+                  <!-- this will be added dynamically -->
+                </ul>
+              </div>
+            </div>
+          </div>
+    </body>
+</html>
