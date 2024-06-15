@@ -8,7 +8,7 @@ To test the visualizer, you should do the following:
 
 1.  Clone our repository:
     ```
-    git clone (linke missing)
+    git clone https://github.com/evpipis/bplus_visualizer.git
     ```
 
 2.  Change directory to the cloned repository.
